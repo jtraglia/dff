@@ -8,13 +8,13 @@ pub use server::Server;
 pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Connection error: {0}")]
     Connection(String),
-    
+
     #[error("Protocol error: {0}")]
     Protocol(String),
-    
+
     #[error("Client error: {0}")]
     Client(String),
 }

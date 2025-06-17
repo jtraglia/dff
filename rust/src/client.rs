@@ -40,7 +40,7 @@ impl Client {
             method: String::new(),
         }
     }
-    
+
     pub async fn connect(&mut self) -> Result<()> {
         // Retry connection to handle server startup timing
         let mut stream = None;
@@ -58,47 +58,47 @@ impl Client {
                 }
             }
         }
-        
+
         let mut stream = stream.unwrap();
-        
+
         // Send client name (no length prefix, just the name)
         stream.write_all(self.name.as_bytes()).await?;
-        
+
         // Read input shared memory ID (4 bytes, big-endian)
         let mut input_shm_id_bytes = [0u8; 4];
         stream.read_exact(&mut input_shm_id_bytes).await?;
         let input_shm_id = u32::from_be_bytes(input_shm_id_bytes) as c_int;
-        
+
         // Attach to input shared memory
         let input_shm_ptr = unsafe { shmat(input_shm_id, ptr::null(), 0) };
         if input_shm_ptr == (-1isize as *mut c_void) {
             return Err(Error::Client("Failed to attach to input shared memory".to_string()));
         }
         self.input_shm = Some(input_shm_ptr as *mut u8);
-        
+
         // Read output shared memory ID (4 bytes, big-endian)
         let mut output_shm_id_bytes = [0u8; 4];
         stream.read_exact(&mut output_shm_id_bytes).await?;
         let output_shm_id = u32::from_be_bytes(output_shm_id_bytes) as c_int;
-        
+
         // Attach to output shared memory
         let output_shm_ptr = unsafe { shmat(output_shm_id, ptr::null(), 0) };
         if output_shm_ptr == (-1isize as *mut c_void) {
             return Err(Error::Client("Failed to attach to output shared memory".to_string()));
         }
         self.output_shm = Some(output_shm_ptr as *mut u8);
-        
+
         // Read method name (up to 64 bytes)
         let mut method_bytes = [0u8; 64];
         let method_length = stream.read(&mut method_bytes).await?;
         self.method = String::from_utf8_lossy(&method_bytes[..method_length]).to_string();
-        
+
         log::info!("Connected with fuzzing method: {}", self.method);
-        
+
         self.conn = Some(stream);
         Ok(())
     }
-    
+
     pub async fn run(&mut self) -> Result<()> {
         let stream = self.conn.as_mut()
             .ok_or_else(|| Error::Client("Not connected".to_string()))?;
@@ -106,10 +106,10 @@ impl Client {
             .ok_or_else(|| Error::Client("Input shared memory not attached".to_string()))?;
         let output_shm = self.output_shm
             .ok_or_else(|| Error::Client("Output shared memory not attached".to_string()))?;
-        
+
         log::info!("Client {} started processing", self.name);
         println!("Client running... Press Ctrl+C to exit.");
-        
+
         loop {
             tokio::select! {
                 // Handle Ctrl+C signal
@@ -117,7 +117,7 @@ impl Client {
                     log::info!("Received interrupt signal, shutting down...");
                     break;
                 }
-                
+
                 // Read input sizes from server (variable length, up to 1024 bytes)
                 result = async {
                     let mut input_size_buffer = [0u8; 1024];
@@ -126,17 +126,17 @@ impl Client {
                 } => {
                     match result {
                         Ok((bytes_read, input_size_buffer)) if bytes_read >= 4 => {
-                            
+
                             let num_inputs = u32::from_be_bytes([
                                 input_size_buffer[0],
-                                input_size_buffer[1], 
+                                input_size_buffer[1],
                                 input_size_buffer[2],
                                 input_size_buffer[3]
                             ]) as usize;
-                            
+
                             let mut inputs = Vec::new();
                             let mut input_offset = 0usize;
-                            
+
                             // Extract input sizes and create slices from shared memory
                             for i in 0..num_inputs {
                                 let start = 4 + i * 4;
@@ -144,14 +144,14 @@ impl Client {
                                     log::error!("Unexpected end of input sizes data");
                                     break;
                                 }
-                                
+
                                 let input_size = u32::from_be_bytes([
                                     input_size_buffer[start],
                                     input_size_buffer[start + 1],
-                                    input_size_buffer[start + 2], 
+                                    input_size_buffer[start + 2],
                                     input_size_buffer[start + 3]
                                 ]) as usize;
-                                
+
                                 unsafe {
                                     let input_slice = std::slice::from_raw_parts(
                                         input_shm.add(input_offset),
@@ -161,11 +161,11 @@ impl Client {
                                     input_offset += input_size;
                                 }
                             }
-                            
+
                             // Process inputs
                             let input_refs: Vec<&[u8]> = inputs.iter().map(|&s| s).collect();
                             let start_time = std::time::Instant::now();
-                            
+
                             match (self.process_func)(&self.method, &input_refs) {
                                 Ok(output) => {
                                     // Write output to shared memory
@@ -176,10 +176,10 @@ impl Client {
                                             output.len()
                                         );
                                     }
-                                    
+
                                     let elapsed = start_time.elapsed();
                                     println!("Processing time: {:?}", elapsed);
-                                    
+
                                     // Send output size back to server (4 bytes, big-endian)
                                     let output_size = (output.len() as u32).to_be_bytes();
                                     if let Err(e) = stream.write_all(&output_size).await {
@@ -209,7 +209,7 @@ impl Client {
                 }
             }
         }
-        
+
         // Clean shutdown
         log::info!("Client shutting down gracefully");
         Ok(())
