@@ -26,3 +26,13 @@ sudo sysctl -w kernel.shmall=256000
 sudo sysctl -w kern.sysv.shmmax=104857600
 sudo sysctl -w kern.sysv.shmall=256000
 ```
+
+## Usage
+
+### Go
+
+See the [examples](./examples/golang).
+
+### Rust
+
+See the [examples](./examples/rust).

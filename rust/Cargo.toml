@@ -1,0 +1,25 @@
+[package]
+name = "dff"
+version = "0.1.0"
+edition = "2021"
+authors = ["DFF Contributors"]
+description = "Differential Fuzzing Framework"
+license = "MIT"
+repository = "https://github.com/jtraglia/dff"
+
+[dependencies]
+tokio = { version = "1.42", features = ["full"] }
+bytes = "1.9"
+libc = "0.2"
+anyhow = "1.0"
+thiserror = "2.0"
+log = "0.4"
+env_logger = "0.11"
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+futures = "0.3"
+
+[lib]
+name = "dff"
+path = "src/lib.rs"
