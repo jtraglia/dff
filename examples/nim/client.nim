@@ -1,4 +1,4 @@
-import ../../nim/client
+import ../../nim/dff/client
 import nimcrypto
 
 proc processFunc(meth: string, inputs: seq[string]): string =
