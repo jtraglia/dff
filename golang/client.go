@@ -138,7 +138,7 @@ func (c *Client) Run() error {
 		// Write the processed result into the output shared memory.
 		copy(c.outputShm, result)
 		elapsedTime := time.Since(startTime)
-		fmt.Printf("Processing time: %v\n", elapsedTime)
+		fmt.Printf("Processing time: %.2fms\n", float64(elapsedTime.Nanoseconds())/1e6)
 
 		// Send the size of the processed result back to the server (4 bytes).
 		var responseSizeBuffer [4]byte

@@ -178,7 +178,7 @@ impl Client {
                                     }
 
                                     let elapsed = start_time.elapsed();
-                                    println!("Processing time: {:?}", elapsed);
+                                    println!("Processing time: {:.2}ms", elapsed.as_secs_f64() * 1000.0);
 
                                     // Send output size back to server (4 bytes, big-endian)
                                     let output_size = (output.len() as u32).to_be_bytes();
