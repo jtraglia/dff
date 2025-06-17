@@ -1,13 +1,16 @@
 import ../../nim/client
-import std/hashes
+import nimcrypto
 
 proc processFunc(meth: string, inputs: seq[string]): string =
   case meth
   of "sha":
     if inputs.len == 0:
       raise newException(ValueError, "No inputs provided")
-    let hashValue = hash(inputs[0])
-    return $hashValue
+    let digest = sha256.digest(inputs[0])
+    result = newString(32)
+    for i in 0..<32:
+      result[i] = char(digest.data[i])
+
   else:
     raise newException(ValueError, "Unknown method: '" & meth & "'")
 

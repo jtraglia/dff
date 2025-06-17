@@ -7,6 +7,7 @@ srcDir        = "."
 
 # Dependencies
 requires "nim >= 1.6.0"
+requires "nimcrypto"
 
 # Tasks
 task example, "Run the example client":
