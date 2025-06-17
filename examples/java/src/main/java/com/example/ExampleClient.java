@@ -11,7 +11,7 @@ import com.github.jtraglia.dff.ProcessFunc;
  * This example demonstrates how to use the client to connect to a fuzzing server
  * and process inputs using the SHA256 method.
  */
-public class DffExample {
+public class ExampleClient {
 
     /**
      * Example processing function that supports the "sha" method.
@@ -25,8 +25,6 @@ public class DffExample {
                     if (inputs.length == 0) {
                         throw new IllegalArgumentException("No inputs provided");
                     }
-
-                    // Compute SHA256 hash of the first input
                     MessageDigest digest = MessageDigest.getInstance("SHA-256");
                     return digest.digest(inputs[0]);
 
@@ -40,16 +38,11 @@ public class DffExample {
         Client client = new Client("java", new ExampleProcessFunc());
 
         try {
-            // Connect to the fuzzing server
             client.connect();
-
-            // Run the fuzzing client
             client.run();
-
         } catch (Exception e) {
             System.err.printf("Error: %s%n", e.getMessage());
         } finally {
-            // Clean up resources
             client.close();
         }
     }
