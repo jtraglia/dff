@@ -27,11 +27,11 @@ extern "C" {
 }
 
 struct ClientEntry {
-    name: String,
+    _name: String,
     conn: UnixStream,
     _shm_id: c_int,
     shm_buffer: Vec<u8>,
-    method: String,
+    _method: String,
 }
 
 pub struct Server {
@@ -272,11 +272,11 @@ impl Server {
         
         // Store client entry
         let client_entry = ClientEntry {
-            name: client_name.clone(),
+            _name: client_name.clone(),
             conn: stream,
             _shm_id: output_shm_id,
             shm_buffer,
-            method: self.method.clone(),
+            _method: self.method.clone(),
         };
         
         {
@@ -370,7 +370,7 @@ impl Server {
                                         shmctl(client._shm_id, IPC_RMID, std::ptr::null_mut());
                                     }
                                     clients.remove(&client_name);
-                                    return;
+                                    return None;
                                 }
                                 
                                 // Read response (output size)
@@ -384,27 +384,71 @@ impl Server {
                                         shmctl(client._shm_id, IPC_RMID, std::ptr::null_mut());
                                     }
                                     clients.remove(&client_name);
-                                    return;
+                                    return None;
                                 }
                                 
                                 let output_size = u32::from_be_bytes(response) as usize;
                                 if output_size > 0 && output_size <= client.shm_buffer.len() {
-                                    // Read output from client's shared memory (for comparison)
-                                    // In a full implementation, we'd compare results between clients
-                                    log::debug!("Client {} processed inputs, output size: {} (method: {})", 
-                                              client.name, output_size, client.method);
+                                    // The client.shm_buffer is just a copy from registration time
+                                    // We need to read from the actual shared memory segment
+                                    let result = unsafe {
+                                        let shm_ptr = shmat(client._shm_id, std::ptr::null(), 0);
+                                        if shm_ptr == (-1isize as *mut c_void) {
+                                            println!("Failed to attach to client {} shared memory for reading", client_name);
+                                            return None;
+                                        }
+                                        let slice = std::slice::from_raw_parts(shm_ptr as *const u8, output_size);
+                                        let result = slice.to_vec();
+                                        shmdt(shm_ptr);
+                                        result
+                                    };
+                                    return Some((client_name.clone(), result));
                                 } else if output_size > 0 {
-                                    log::warn!("Client {} returned invalid output size: {}", client_name, output_size);
+                                    println!("Client {} returned invalid output size: {}", client_name, output_size);
                                 }
                             }
+                            None
                         });
                         tasks.push(task);
                     }
                     
             // Wait for all client tasks to complete (like WaitGroup in Go)
-            tokio::select! {
-                _ = futures::future::join_all(tasks) => {},
+            let results = tokio::select! {
+                results = futures::future::join_all(tasks) => results,
                 _ = self.shutdown.notified() => break,
+            };
+            
+            // Collect successful results for comparison
+            let mut client_results = std::collections::HashMap::new();
+            for result in results {
+                if let Ok(Some((client_name, output))) = result {
+                    client_results.insert(client_name, output);
+                }
+            }
+            
+            // Compare client responses like Go server does
+            if client_results.len() > 1 {
+                let mut first_result: Option<&Vec<u8>> = None;
+                let mut same = true;
+                
+                for (_, result) in &client_results {
+                    match first_result {
+                        None => first_result = Some(result),
+                        Some(first) => {
+                            if first != result {
+                                same = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if !same {
+                    println!("Values are different:");
+                    for (client_name, result) in &client_results {
+                        println!("Key: {}, Value: {}", client_name, hex::encode(result));
+                    }
+                }
             }
             
             // Update statistics
