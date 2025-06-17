@@ -1,4 +1,4 @@
-## Differential Fuzzing Framework client for Nim
+## Differential Fuzzing Framework
 ##
 ## This module provides a client implementation for connecting to a fuzzing server
 ## and processing fuzzing inputs through a user-provided callback function.

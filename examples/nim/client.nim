@@ -10,7 +10,6 @@ proc processFunc(meth: string, inputs: seq[string]): string =
     result = newString(32)
     for i in 0..<32:
       result[i] = char(digest.data[i])
-
   else:
     raise newException(ValueError, "Unknown method: '" & meth & "'")
 
