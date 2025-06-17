@@ -237,6 +237,15 @@ func (s *Server) Start() error {
 				for client, result := range results {
 					fmt.Printf("Key: %v, Value: %x\n", client, result)
 				}
+
+				// Save finding to disk
+				s.mu.Lock()
+				iterationNum := s.iterationCount
+				s.mu.Unlock()
+
+				if err := s.saveFinding(iterationNum, inputs, results); err != nil {
+					fmt.Printf("Failed to save finding: %v\n", err)
+				}
 			}
 
 			duration := time.Since(start)
@@ -367,6 +376,39 @@ func (s *Server) Stop(inputShmId int, inputShmBuffer []byte, registrationListene
 	registrationListener.Close()
 	os.Remove(s.socketPath)
 	fmt.Println("Server stopped and cleaned up.")
+}
+
+// saveFinding saves a fuzzing finding (input and client outputs) to disk
+func (s *Server) saveFinding(iteration int, inputs [][]byte, results map[string][]byte) error {
+	findingsDir := fmt.Sprintf("findings/%d", iteration)
+	if err := os.MkdirAll(findingsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create findings directory: %v", err)
+	}
+
+	// Save input data (concatenated)
+	inputPath := fmt.Sprintf("%s/input", findingsDir)
+	inputFile, err := os.Create(inputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create input file: %v", err)
+	}
+	defer inputFile.Close()
+
+	for _, input := range inputs {
+		if _, err := inputFile.Write(input); err != nil {
+			return fmt.Errorf("failed to write input data: %v", err)
+		}
+	}
+
+	// Save each client's output
+	for clientName, output := range results {
+		outputPath := fmt.Sprintf("%s/%s", findingsDir, clientName)
+		if err := os.WriteFile(outputPath, output, 0644); err != nil {
+			return fmt.Errorf("failed to write %s output: %v", clientName, err)
+		}
+	}
+
+	fmt.Printf("Finding saved to: %s\n", findingsDir)
+	return nil
 }
 
 // Shutdown signals the server to stop. It is safe to call from another goroutine.

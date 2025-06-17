@@ -3,17 +3,22 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"time"
+	"sync/atomic"
 
 	"github.com/jtraglia/dff"
 )
 
-// inputProvider returns some random bytes between 1 and 4 MB.
+// Global seed counter for deterministic fuzzing
+var seedCounter int64 = 1
+
+// inputProvider returns some random bytes between 1 and 4 MB using a deterministic seed.
 func inputProvider() [][]byte {
 	const minSize = 1 * 1024 * 1024 // 1 MB
 	const maxSize = 4 * 1024 * 1024 // 4 MB
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Use atomic counter as seed for deterministic fuzzing
+	seed := atomic.AddInt64(&seedCounter, 1)
+	r := rand.New(rand.NewSource(seed))
 	size := r.Intn(maxSize-minSize+1) + minSize
 
 	input := make([]byte, size)

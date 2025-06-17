@@ -448,6 +448,16 @@ impl Server {
                     for (client_name, result) in &client_results {
                         println!("Key: {}, Value: {}", client_name, hex::encode(result));
                     }
+
+                    // Save finding to disk
+                    let iteration_num = {
+                        let count = self.iteration_count.lock().await;
+                        *count
+                    };
+
+                    if let Err(e) = self.save_finding(iteration_num, &inputs, &client_results).await {
+                        log::error!("Failed to save finding: {}", e);
+                    }
                 }
             }
 
@@ -487,6 +497,43 @@ impl Server {
                 _ = self.shutdown.notified() => break,
             }
         }
+    }
+
+    async fn save_finding(
+        &self,
+        iteration: u64,
+        inputs: &[Vec<u8>],
+        client_results: &std::collections::HashMap<String, Vec<u8>>,
+    ) -> Result<()> {
+        use std::io::Write;
+
+        let findings_dir = format!("findings/{}", iteration);
+        std::fs::create_dir_all(&findings_dir).map_err(|e| {
+            crate::Error::Client(format!("Failed to create findings directory: {}", e))
+        })?;
+
+        // Save input data (concatenated)
+        let input_path = format!("{}/input", findings_dir);
+        let mut input_file = std::fs::File::create(&input_path).map_err(|e| {
+            crate::Error::Client(format!("Failed to create input file: {}", e))
+        })?;
+
+        for input in inputs {
+            input_file.write_all(input).map_err(|e| {
+                crate::Error::Client(format!("Failed to write input data: {}", e))
+            })?;
+        }
+
+        // Save each client's output
+        for (client_name, output) in client_results {
+            let output_path = format!("{}/{}", findings_dir, client_name);
+            std::fs::write(&output_path, output).map_err(|e| {
+                crate::Error::Client(format!("Failed to write {} output: {}", client_name, e))
+            })?;
+        }
+
+        println!("Finding saved to: {}", findings_dir);
+        Ok(())
     }
 }
 
