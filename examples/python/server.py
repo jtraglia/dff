@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 
 # Add path to project for local testing
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
+#sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
 
 from dff import Server
 
