@@ -7,7 +7,7 @@ A Python implementation of the DFF (Differential Fuzzing Framework) that uses Un
 ### From PyPI (once published)
 
 ```bash
-pip install dff
+pip install dff-py
 ```
 
 ### From Source
