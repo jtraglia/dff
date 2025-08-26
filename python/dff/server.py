@@ -296,7 +296,7 @@ class Server:
                 duration = time.perf_counter() - start_time
                 self.iteration_count += 1
                 self.total_duration += duration
-                
+
 
         except Exception as e:
             if not self.shutdown:

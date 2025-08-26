@@ -67,7 +67,7 @@ class SharedMemory:
 
     def __init__(self, shmid: int, size: int = 0):
         """Initialize shared memory wrapper.
-        
+
         Args:
             shmid: Shared memory ID
             size: Size of the shared memory segment (for reference)
@@ -80,15 +80,15 @@ class SharedMemory:
     @classmethod
     def create(cls, key: int, size: int, perm: int = 0o666) -> "SharedMemory":
         """Create a new shared memory segment.
-        
+
         Args:
             key: IPC key for the shared memory segment
             size: Size of the segment in bytes
             perm: Permissions for the segment
-            
+
         Returns:
             SharedMemory object
-            
+
         Raises:
             OSError: If creation fails
         """
@@ -101,14 +101,14 @@ class SharedMemory:
     @classmethod
     def get(cls, key: int, size: int = 0) -> "SharedMemory":
         """Get existing shared memory segment.
-        
+
         Args:
             key: IPC key for the shared memory segment
             size: Expected size (0 to get existing)
-            
+
         Returns:
             SharedMemory object
-            
+
         Raises:
             OSError: If segment doesn't exist
         """
@@ -119,27 +119,27 @@ class SharedMemory:
 
     def attach(self, addr: int = 0, flags: int = 0) -> ctypes.Array:
         """Attach to the shared memory segment.
-        
+
         Args:
             addr: Preferred attach address (0 for system choice)
             flags: Attach flags
-            
+
         Returns:
             ctypes array of the attached segment
-            
+
         Raises:
             OSError: If attach fails
         """
         if self._attached:
             raise RuntimeError("Already attached to shared memory")
-            
+
         result = libc.shmat(self.shmid, addr, flags)
         if result == -1:
             raise OSError(f"Failed to attach to shared memory ID {self.shmid}")
-            
+
         self.addr = result
         self._attached = True
-        
+
         if self.size > 0:
             return (ctypes.c_ubyte * self.size).from_address(self.addr)
         else:
@@ -149,11 +149,11 @@ class SharedMemory:
         """Detach from the shared memory segment."""
         if not self._attached or self.addr is None:
             return
-            
+
         result = libc.shmdt(self.addr)
         if result == -1:
             raise OSError("Failed to detach from shared memory")
-            
+
         self.addr = None
         self._attached = False
 
@@ -174,11 +174,11 @@ class SharedMemory:
 
 def attach_by_id(shmid: int, size: int = 0) -> ctypes.Array:
     """Convenience function to attach to shared memory by ID.
-    
+
     Args:
         shmid: Shared memory ID
         size: Expected size (0 for default max)
-        
+
     Returns:
         ctypes array of the attached segment
     """

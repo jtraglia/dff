@@ -12,24 +12,24 @@ from dff import Server
 
 def data_provider() -> list[bytes]:
     """Generate random data for fuzzing.
-    
+
     Returns:
         List containing a single random byte array
     """
     MIN_SIZE = 1 * 1024 * 1024  # 1 MB
     MAX_SIZE = 4 * 1024 * 1024  # 4 MB
-    
+
     # Use a deterministic seed that increments
     if not hasattr(data_provider, "seed_counter"):
         data_provider.seed_counter = 1
-    
+
     seed = data_provider.seed_counter
     data_provider.seed_counter += 1
-    
+
     # Generate random data with deterministic seed
     random.seed(seed)
     size = random.randint(MIN_SIZE, MAX_SIZE)
-    
+
     # Generate random bytes efficiently using random.randbytes (Python 3.9+)
     # or random.getrandbits for older versions
     try:
@@ -42,14 +42,14 @@ def data_provider() -> list[bytes]:
             chunk = random.getrandbits(chunk_size * 8).to_bytes(chunk_size, 'little')
             data[i:i+chunk_size] = chunk
         data = bytes(data)
-    
+
     return [data]
 
 
 def main() -> None:
     """Main entry point."""
     server = Server("sha")
-    
+
     try:
         server.run(data_provider)
     except KeyboardInterrupt:

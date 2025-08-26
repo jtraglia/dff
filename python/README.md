@@ -34,7 +34,7 @@ def process_func(method: str, inputs: list[bytes]) -> bytes:
     """Process function that handles fuzzing inputs."""
     if method != "sha":
         raise ValueError(f"Unknown method: {method}")
-    
+
     # Process the first input (matching Go/Java behavior)
     import hashlib
     return hashlib.sha256(inputs[0]).digest()

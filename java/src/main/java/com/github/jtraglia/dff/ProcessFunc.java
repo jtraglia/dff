@@ -8,7 +8,7 @@ package com.github.jtraglia.dff;
 public interface ProcessFunc {
     /**
      * Process fuzzing inputs and return the result.
-     * 
+     *
      * @param method the fuzzing method name received from the server
      * @param inputs array of input byte arrays to process
      * @return the processed result as a byte array
