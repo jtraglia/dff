@@ -218,8 +218,14 @@ class Server:
                         print(f"Warning: Input data exceeds shared memory size")
                         break
 
-                    # Write to shared memory
-                    self.input_shm_buffer[offset:offset + size] = input_data
+                    # Write to shared memory using memmove for better performance
+                    dest_ptr = ctypes.addressof(self.input_shm_buffer) + offset
+                    if isinstance(input_data, bytes):
+                        src = ctypes.c_char_p(input_data)
+                        ctypes.memmove(dest_ptr, src, size)
+                    else:
+                        # Fallback for other types
+                        self.input_shm_buffer[offset:offset + size] = input_data
                     input_sizes.append(size)
                     offset += size
 
@@ -290,6 +296,7 @@ class Server:
                 duration = time.perf_counter() - start_time
                 self.iteration_count += 1
                 self.total_duration += duration
+                
 
         except Exception as e:
             if not self.shutdown:

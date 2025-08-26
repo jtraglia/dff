@@ -138,7 +138,10 @@ class Client:
                 for size in input_sizes:
                     if offset + size > len(self.input_shm):
                         raise ValueError(f"Input size {size} at offset {offset} exceeds buffer")
-                    inputs.append(bytes(self.input_shm[offset:offset + size]))
+                    # Use string_at to read bytes directly from memory address
+                    data_ptr = ctypes.addressof(self.input_shm) + offset
+                    data = ctypes.string_at(data_ptr, size)
+                    inputs.append(data)
                     offset += size
 
                 try:
@@ -156,8 +159,14 @@ class Client:
                 if len(result) > len(self.output_shm):
                     raise ValueError(f"Result size {len(result)} exceeds output buffer")
 
-                # Write result bytes to output shared memory
-                self.output_shm[0:len(result)] = result
+                # Write result bytes to output shared memory using memmove for performance
+                if isinstance(result, bytes) and len(result) > 0:
+                    dest_ptr = ctypes.addressof(self.output_shm)
+                    src = ctypes.c_char_p(result)
+                    ctypes.memmove(dest_ptr, src, len(result))
+                else:
+                    # Fallback for empty or non-bytes
+                    self.output_shm[0:len(result)] = result
 
                 self.conn.sendall(struct.pack(">I", len(result)))
 

@@ -30,8 +30,18 @@ def data_provider() -> list[bytes]:
     random.seed(seed)
     size = random.randint(MIN_SIZE, MAX_SIZE)
     
-    # Generate random bytes
-    data = bytes(random.randint(0, 255) for _ in range(size))
+    # Generate random bytes efficiently using random.randbytes (Python 3.9+)
+    # or random.getrandbits for older versions
+    try:
+        data = random.randbytes(size)  # Fast method for Python 3.9+
+    except AttributeError:
+        # Fallback for Python < 3.9 - still much faster than per-byte generation
+        data = bytearray(size)
+        for i in range(0, size, 1024):
+            chunk_size = min(1024, size - i)
+            chunk = random.getrandbits(chunk_size * 8).to_bytes(chunk_size, 'little')
+            data[i:i+chunk_size] = chunk
+        data = bytes(data)
     
     return [data]
 
