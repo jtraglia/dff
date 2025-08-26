@@ -23,9 +23,7 @@
         <dependency>
             <groupId>com.github.jtraglia</groupId>
             <artifactId>dff</artifactId>
-            <version>0.1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../../java/target/dff-0.1.0.jar</systemPath>
+            <version>0.1.1</version>
         </dependency>
         <dependency>
             <groupId>net.java.dev.jna</groupId>

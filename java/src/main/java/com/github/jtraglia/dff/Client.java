@@ -81,7 +81,15 @@ public class Client {
         if (methodLength <= 0) {
             throw new IOException("Failed to read method name");
         }
-        method = new String(methodBuffer.array(), 0, methodLength).trim();
+        // Find null terminator or use full length
+        int actualLength = methodLength;
+        for (int i = 0; i < methodLength; i++) {
+            if (methodBuffer.get(i) == 0) {
+                actualLength = i;
+                break;
+            }
+        }
+        method = new String(methodBuffer.array(), 0, actualLength).trim();
 
         System.out.printf("Connected with fuzzing method: %s%n", method);
     }
