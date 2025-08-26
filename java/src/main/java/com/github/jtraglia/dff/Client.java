@@ -114,31 +114,25 @@ public class Client {
 
         while (!shutdown.get()) {
             try {
-                // Read input sizes from server
-                ByteBuffer inputSizeBuffer = ByteBuffer.allocate(MAX_INPUT_SIZE_BUFFER);
-                inputSizeBuffer.order(ByteOrder.BIG_ENDIAN);
+                // First read just the count (4 bytes)
+                ByteBuffer countBuffer = ByteBuffer.allocate(4);
+                countBuffer.order(ByteOrder.BIG_ENDIAN);
+                readFully(countBuffer);
+                countBuffer.flip();
+                int numInputs = countBuffer.getInt();
 
-                int bytesRead = channel.read(inputSizeBuffer);
-                if (bytesRead < 4) {
-                    if (bytesRead == 0) {
-                        // Server closed connection
-                        break;
-                    }
-                    throw new IOException("Invalid input sizes data received");
-                }
-
-                inputSizeBuffer.flip();
-                int numInputs = inputSizeBuffer.getInt();
+                // Now read all the sizes (numInputs * 4 bytes)
+                ByteBuffer sizesBuffer = ByteBuffer.allocate(numInputs * 4);
+                sizesBuffer.order(ByteOrder.BIG_ENDIAN);
+                readFully(sizesBuffer);
+                sizesBuffer.flip();
 
                 // Extract input sizes and create byte arrays from shared memory
                 byte[][] inputs = new byte[numInputs][];
                 long inputOffset = 0;
 
                 for (int i = 0; i < numInputs; i++) {
-                    if (inputSizeBuffer.remaining() < 4) {
-                        throw new IOException("Unexpected end of input sizes data");
-                    }
-                    int inputSize = inputSizeBuffer.getInt();
+                    int inputSize = sizesBuffer.getInt();
 
                     // Read data from shared memory
                     inputs[i] = new byte[inputSize];
