@@ -3,9 +3,9 @@
 
 import sys
 import hashlib
-import logging
 from pathlib import Path
 
+# Add path to project for local testing
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
 
 from dff import Client
@@ -35,11 +35,7 @@ def process_sha(method: str, inputs: list[bytes]) -> bytes:
 
 def main() -> None:
     """Main entry point."""
-    logging.basicConfig(level=logging.INFO)
-
-    name = sys.argv[1] if len(sys.argv) > 1 else "python"
-
-    client = Client(name, process_sha)
+    client = Client("python", process_sha)
 
     try:
         client.connect()

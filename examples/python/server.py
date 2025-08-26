@@ -5,6 +5,7 @@ import sys
 import random
 from pathlib import Path
 
+# Add path to project for local testing
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
 
 from dff import Server
@@ -22,26 +23,13 @@ def data_provider() -> list[bytes]:
     # Use a deterministic seed that increments
     if not hasattr(data_provider, "seed_counter"):
         data_provider.seed_counter = 1
-
     seed = data_provider.seed_counter
     data_provider.seed_counter += 1
 
     # Generate random data with deterministic seed
     random.seed(seed)
     size = random.randint(MIN_SIZE, MAX_SIZE)
-
-    # Generate random bytes efficiently using random.randbytes (Python 3.9+)
-    # or random.getrandbits for older versions
-    try:
-        data = random.randbytes(size)  # Fast method for Python 3.9+
-    except AttributeError:
-        # Fallback for Python < 3.9 - still much faster than per-byte generation
-        data = bytearray(size)
-        for i in range(0, size, 1024):
-            chunk_size = min(1024, size - i)
-            chunk = random.getrandbits(chunk_size * 8).to_bytes(chunk_size, 'little')
-            data[i:i+chunk_size] = chunk
-        data = bytes(data)
+    data = random.randbytes(size)
 
     return [data]
 
