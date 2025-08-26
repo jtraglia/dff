@@ -120,10 +120,10 @@ func (s *Server) Start() error {
 		select {
 		case <-signalChan:
 			fmt.Println("\nReceived interrupt signal")
-			s.Stop(inputShmId, inputShmBuffer, registrationListener)
+			s.stop(inputShmId, inputShmBuffer, registrationListener)
 			os.Exit(0)
 		case <-s.quit:
-			s.Stop(inputShmId, inputShmBuffer, registrationListener)
+			s.stop(inputShmId, inputShmBuffer, registrationListener)
 			return
 		}
 	}()
@@ -363,9 +363,9 @@ func (s *Server) statusUpdates() {
 	}
 }
 
-// Stop cleans up resources by detaching shared memory segments, closing client connections,
+// stop cleans up resources by detaching shared memory segments, closing client connections,
 // closing the registration listener, and removing the Unix domain socket.
-func (s *Server) Stop(inputShmId int, inputShmBuffer []byte, registrationListener net.Listener) {
+func (s *Server) stop(inputShmId int, inputShmBuffer []byte, registrationListener net.Listener) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	detachAndDelete(inputShmId, inputShmBuffer)

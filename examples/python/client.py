@@ -1,41 +1,22 @@
 #!/usr/bin/env python3
-"""Example DFF client that implements SHA256 hashing."""
 
-import sys
+import dff
 import hashlib
-from pathlib import Path
-
-# Add path to project for local testing
-#sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
-
-from dff import Client
+import sys
 
 
-def process_sha(method: str, inputs: list[bytes]) -> bytes:
-    """Process function for SHA256 hashing.
-
-    Args:
-        method: The fuzzing method (should be "sha")
-        inputs: List of byte arrays to hash
-
-    Returns:
-        SHA256 hash of the first input
-
-    Raises:
-        ValueError: If method is not "sha" or no inputs provided
-    """
-    if method != "sha":
-        raise ValueError(f"Unknown method: {method}")
-
-    if not inputs:
-        raise ValueError("No inputs provided")
-
-    return hashlib.sha256(inputs[0]).digest()
+def process_func(method: str, inputs: list[bytes]) -> bytes:
+    """An example process function."""
+    match method:
+        case "sha":
+            return hashlib.sha256(inputs[0]).digest()
+        case _:
+            raise ValueError(f"Unknown method: {method}")
 
 
 def main() -> None:
     """Main entry point."""
-    client = Client("python", process_sha)
+    client = dff.Client("python", process_func)
 
     try:
         client.connect()

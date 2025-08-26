@@ -1,6 +1,4 @@
 github.com/gen2brain/shm v0.1.1 h1:1cTVA5qcsUFixnDHl14TmRoxgfWEEZlTezpUj1vm5uQ=
 github.com/gen2brain/shm v0.1.1/go.mod h1:UgIcVtvmOu+aCJpqJX7GOtiN7X2ct+TKLg4RTxwPIUA=
-github.com/jtraglia/dff v0.1.3 h1:SYF00TSfH/rww9oAoBhsIoxX7BxZHm9n7RH7reH3sUs=
-github.com/jtraglia/dff v0.1.3/go.mod h1:H1G8KkXs04oqhTuU7eo70dwQDALABwnvIuRbPeQ70GQ=
 github.com/jtraglia/dff v0.1.4 h1:rWRUH0ShH27OG68A3TivRmIueKNFiAM0/PbGofXCedY=
 github.com/jtraglia/dff v0.1.4/go.mod h1:6uC9P9eUUGP7WGnz4wepl55xjKMB1Z6gXrX9haT6QVM=

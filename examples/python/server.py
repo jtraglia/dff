@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
-"""Example DFF server that provides random data for SHA256 fuzzing."""
 
-import sys
+import dff
 import random
-from pathlib import Path
-
-# Add path to project for local testing
-#sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
-
-from dff import Server
+import sys
 
 
 def data_provider() -> list[bytes]:
-    """Generate random data for fuzzing.
-
-    Returns:
-        List containing a single random byte array
-    """
+    """Generate random data for fuzzing."""
     MIN_SIZE = 1 * 1024 * 1024  # 1 MB
     MAX_SIZE = 4 * 1024 * 1024  # 4 MB
 
@@ -36,7 +26,7 @@ def data_provider() -> list[bytes]:
 
 def main() -> None:
     """Main entry point."""
-    server = Server("sha")
+    server = dff.Server("sha")
 
     try:
         server.run(data_provider)

@@ -266,7 +266,7 @@ class Server:
 
                 # Remove dead clients
                 for name in dead_clients:
-                    print(f"Removing dead client: {name}")
+                    print(f"Disconnected client: {name}")
                     with self.clients_lock:
                         if name in self.clients:
                             try:
