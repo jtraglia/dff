@@ -324,18 +324,31 @@ func (s *Server) handleClient(conn net.Conn, inputShmId int) {
 		return
 	}
 
+	// Validate client name
+	if clientName == "method" || clientName == "input" {
+		fmt.Printf("Invalid client name: %s (reserved name)\n", clientName)
+		detachAndDelete(outputShmId, clientShmBuffer)
+		conn.Close()
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.clients[clientName]; !exists {
-		s.clients[clientName] = &clientEntry{
-			Name:      clientName,
-			Conn:      conn,
-			ShmId:     outputShmId,
-			ShmBuffer: clientShmBuffer,
-			Method:    s.Method,
-		}
-		fmt.Printf("Registered new client: %s\n", clientName)
+	if _, exists := s.clients[clientName]; exists {
+		fmt.Printf("Client %s already registered (duplicate name)\n", clientName)
+		detachAndDelete(outputShmId, clientShmBuffer)
+		conn.Close()
+		return
 	}
+
+	s.clients[clientName] = &clientEntry{
+		Name:      clientName,
+		Conn:      conn,
+		ShmId:     outputShmId,
+		ShmBuffer: clientShmBuffer,
+		Method:    s.Method,
+	}
+	fmt.Printf("Registered new client: %s\n", clientName)
 }
 
 // statusUpdates periodically prints server status such as total fuzzing time, iteration count,
@@ -397,6 +410,12 @@ func (s *Server) saveFinding(iteration int, inputs [][]byte, results map[string]
 		if _, err := inputFile.Write(input); err != nil {
 			return fmt.Errorf("failed to write input data: %v", err)
 		}
+	}
+
+	// Save method name
+	methodPath := fmt.Sprintf("%s/method", findingsDir)
+	if err := os.WriteFile(methodPath, []byte(s.Method), 0644); err != nil {
+		return fmt.Errorf("failed to write method file: %v", err)
 	}
 
 	// Save each client's output

@@ -200,12 +200,24 @@ impl Server {
 
         log::info!("Client registration request from: {}", client_name);
 
+        // Validate client name
+        if client_name == "method" || client_name == "input" {
+            log::warn!("Invalid client name: {} (reserved name)", client_name);
+            return Err(crate::Error::Client(format!(
+                "Invalid client name: {} (reserved name)",
+                client_name
+            )));
+        }
+
         // Check if client already exists
         {
             let clients = self.clients.lock().await;
             if clients.contains_key(&client_name) {
-                log::warn!("Client {} already registered", client_name);
-                return Ok(());
+                log::warn!("Client {} already registered (duplicate name)", client_name);
+                return Err(crate::Error::Client(format!(
+                    "Client {} already registered (duplicate name)",
+                    client_name
+                )));
             }
         }
 
@@ -523,6 +535,12 @@ impl Server {
                 crate::Error::Client(format!("Failed to write input data: {}", e))
             })?;
         }
+
+        // Save method name
+        let method_path = format!("{}/method", findings_dir);
+        std::fs::write(&method_path, &self.method).map_err(|e| {
+            crate::Error::Client(format!("Failed to write method file: {}", e))
+        })?;
 
         // Save each client's output
         for (client_name, output) in client_results {

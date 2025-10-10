@@ -85,6 +85,20 @@ class Server:
                 return
 
             client_name = name_bytes.decode().rstrip('\x00')
+
+            # Validate client name
+            if client_name == "method" or client_name == "input":
+                print(f"Invalid client name: {client_name} (reserved name)")
+                conn.close()
+                return
+
+            # Check for duplicate client names
+            with self.clients_lock:
+                if client_name in self.clients:
+                    print(f"Client {client_name} already registered (duplicate name)")
+                    conn.close()
+                    return
+
             # Create output shared memory for this client
             output_shm_key = self.input_shm_key + len(self.clients) + 1
 
@@ -112,11 +126,10 @@ class Server:
 
             # Store client
             with self.clients_lock:
-                if client_name not in self.clients:
-                    self.clients[client_name] = ClientEntry(
-                        client_name, conn, output_shm.shmid, self.method
-                    )
-                    print(f"Registered new client: {client_name}")
+                self.clients[client_name] = ClientEntry(
+                    client_name, conn, output_shm.shmid, self.method
+                )
+            print(f"Registered new client: {client_name}")
 
         except Exception as e:
             print(f"Error handling client: {e}")
@@ -292,6 +305,10 @@ class Server:
                             result_hash = hashlib.sha256(result).hexdigest()
                             print(f"Key: {name}, Value: {result_hash}")
 
+                        # Save finding to disk
+                        if self._save_finding(self.iteration_count, inputs, results):
+                            print(f"Finding saved to: findings/{self.iteration_count}")
+
                 # Update statistics
                 duration = time.perf_counter() - start_time
                 self.iteration_count += 1
@@ -341,3 +358,31 @@ class Server:
                 pass
 
         print("Server shutdown complete")
+
+    def _save_finding(self, iteration: int, inputs: List[bytes], results: Dict[str, bytes]) -> bool:
+        """Save finding to disk."""
+        findings_dir = f"findings/{iteration}"
+        try:
+            os.makedirs(findings_dir, exist_ok=True)
+
+            # Save input data (concatenated)
+            input_path = f"{findings_dir}/input"
+            with open(input_path, "wb") as f:
+                for input_data in inputs:
+                    f.write(input_data)
+
+            # Save method name
+            method_path = f"{findings_dir}/method"
+            with open(method_path, "w") as f:
+                f.write(self.method)
+
+            # Save each client's output
+            for client_name, output in results.items():
+                output_path = f"{findings_dir}/{client_name}"
+                with open(output_path, "wb") as f:
+                    f.write(output)
+
+            return True
+        except Exception as e:
+            print(f"Failed to save finding: {e}")
+            return False

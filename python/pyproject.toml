@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dff-py"
-version = "0.1.5"
+version = "0.1.6"
 description = "A simple differential fuzzing framework"
 readme = "README.md"
 authors = [{name = "Justin Traglia", email = "jtraglia@pm.me"}]
