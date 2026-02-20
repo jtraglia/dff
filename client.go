@@ -101,6 +101,11 @@ func (c *Client) Run() error {
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 	fmt.Println("Client running... Press Ctrl+C to exit.")
 
+	var iterationCount int64
+	var totalProcessing time.Duration
+	lastStatus := time.Now()
+	const statusInterval = 5 * time.Second
+
 	for {
 		// Read input sizes from the server.
 		var inputSizeBytes [1024]byte
@@ -137,8 +142,17 @@ func (c *Client) Run() error {
 
 		// Write the processed result into the output shared memory.
 		copy(c.outputShm, result)
-		elapsedTime := time.Since(startTime)
-		fmt.Printf("Processing time: %.2fms\n", float64(elapsedTime.Nanoseconds())/1e6)
+		elapsed := time.Since(startTime)
+		iterationCount++
+		totalProcessing += elapsed
+
+		if time.Since(lastStatus) >= statusInterval {
+			avgMs := float64(totalProcessing.Nanoseconds()) / float64(iterationCount) / 1e6
+			totalSecs := int(totalProcessing.Seconds())
+			fmt.Printf("Iterations: %d, Total Processing: %ds, Average: %.2fms\n",
+				iterationCount, totalSecs, avgMs)
+			lastStatus = time.Now()
+		}
 
 		// Send the size of the processed result back to the server (4 bytes).
 		var responseSizeBuffer [4]byte

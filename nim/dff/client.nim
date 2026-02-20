@@ -87,6 +87,9 @@ proc run*(client: Client) =
   echo "Client running... Press Ctrl+C to exit."
 
   var iterationCount = 0
+  var totalProcessingMs = 0.0
+  var lastStatus = cpuTime()
+  const statusInterval = 5.0
   while true:
     try:
       var inputSizeData = ""
@@ -149,7 +152,12 @@ proc run*(client: Client) =
       for i in 0..<result.len:
         outputPtr[i] = byte(result[i])
 
-      echo "Processing time: ", formatFloat(elapsedTime * 1000, ffDecimal, 2), "ms"
+      totalProcessingMs += elapsedTime * 1000
+      if cpuTime() - lastStatus >= statusInterval:
+        let avgMs = totalProcessingMs / float(iterationCount)
+        let totalSecs = int(totalProcessingMs / 1000)
+        echo "Iterations: ", iterationCount, ", Total Processing: ", totalSecs, "s, Average: ", formatFloat(avgMs, ffDecimal, 2), "ms"
+        lastStatus = cpuTime()
 
       var resultSizeLE = uint32(result.len)
       var resultSizeBE: uint32

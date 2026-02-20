@@ -112,6 +112,11 @@ public class Client {
             System.out.println("\nShutdown signal received. Exiting client.");
         }));
 
+        long iterationCount = 0;
+        long totalProcessingNanos = 0;
+        long lastStatusTime = System.nanoTime();
+        final long STATUS_INTERVAL_NANOS = 5_000_000_000L; // 5 seconds
+
         while (!shutdown.get()) {
             try {
                 // First read just the count (4 bytes)
@@ -148,7 +153,18 @@ public class Client {
                 // Write the processed result to output shared memory
                 outputShm.write(0, result, 0, result.length);
 
-                System.out.printf("Processing time: %.2fms%n", elapsedTime / 1_000_000.0);
+                iterationCount++;
+                totalProcessingNanos += elapsedTime;
+
+                long now = System.nanoTime();
+                if (now - lastStatusTime >= STATUS_INTERVAL_NANOS) {
+                    double avgMs = (totalProcessingNanos / (double) iterationCount) / 1_000_000.0;
+                    long totalSecs = totalProcessingNanos / 1_000_000_000L;
+                    System.out.printf(
+                        "Iterations: %d, Total Processing: %ds, Average: %.2fms%n",
+                        iterationCount, totalSecs, avgMs);
+                    lastStatusTime = now;
+                }
 
                 // Send the size of the processed result back to server (4 bytes, big-endian)
                 ByteBuffer responseSizeBuffer = ByteBuffer.allocate(4);

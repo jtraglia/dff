@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::ptr;
 use std::os::raw::{c_int, c_void};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -110,6 +110,11 @@ impl Client {
         log::info!("Client {} started processing", self.name);
         println!("Client running... Press Ctrl+C to exit.");
 
+        let mut iteration_count: u64 = 0;
+        let mut total_processing = Duration::ZERO;
+        let mut last_status = Instant::now();
+        const STATUS_INTERVAL: Duration = Duration::from_secs(5);
+
         loop {
             tokio::select! {
                 // Handle Ctrl+C signal
@@ -178,7 +183,18 @@ impl Client {
                                     }
 
                                     let elapsed = start_time.elapsed();
-                                    println!("Processing time: {:.2}ms", elapsed.as_secs_f64() * 1000.0);
+                                    iteration_count += 1;
+                                    total_processing += elapsed;
+
+                                    if last_status.elapsed() >= STATUS_INTERVAL {
+                                        let avg_ms = total_processing.as_secs_f64() * 1000.0 / iteration_count as f64;
+                                        let total_secs = total_processing.as_secs();
+                                        println!(
+                                            "Iterations: {}, Total Processing: {}s, Average: {:.2}ms",
+                                            iteration_count, total_secs, avg_ms
+                                        );
+                                        last_status = Instant::now();
+                                    }
 
                                     // Send output size back to server (4 bytes, big-endian)
                                     let output_size = (output.len() as u32).to_be_bytes();

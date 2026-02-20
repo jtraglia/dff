@@ -112,6 +112,11 @@ class Client:
 
         print("Client running... Press Ctrl+C to exit.")
 
+        iteration_count = 0
+        total_processing = 0.0
+        last_status = time.monotonic()
+        STATUS_INTERVAL = 5.0
+
         try:
             while not self.shutdown:
                 # Read the message containing number of inputs and their sizes
@@ -147,8 +152,20 @@ class Client:
                 try:
                     start_time = time.perf_counter()
                     result = self.process_func(self.method, inputs)
-                    elapsed_time = (time.perf_counter() - start_time) * 1000
-                    print(f"Processing time: {elapsed_time:.2f}ms")
+                    elapsed_time = time.perf_counter() - start_time
+                    iteration_count += 1
+                    total_processing += elapsed_time
+
+                    now = time.monotonic()
+                    if now - last_status >= STATUS_INTERVAL:
+                        avg_ms = (total_processing / iteration_count) * 1000
+                        total_secs = int(total_processing)
+                        print(
+                            f"Iterations: {iteration_count}, "
+                            f"Total Processing: {total_secs}s, "
+                            f"Average: {avg_ms:.2f}ms"
+                        )
+                        last_status = now
                 except Exception as e:
                     print(f"Process function error: {e}")
                     result = b""
