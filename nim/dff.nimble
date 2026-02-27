@@ -1,5 +1,5 @@
 # Package
-version       = "0.1.8"
+version       = "0.1.9"
 author        = "Justin Traglia"
 description   = "Differential Fuzzing Framework"
 license       = "MIT"
