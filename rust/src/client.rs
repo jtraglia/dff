@@ -126,8 +126,8 @@ impl Client {
 
         // Register signal handlers (replaces default terminate behavior)
         unsafe {
-            libc::signal(libc::SIGTERM, shutdown_handler as libc::sighandler_t);
-            libc::signal(libc::SIGINT, shutdown_handler as libc::sighandler_t);
+            libc::signal(libc::SIGTERM, shutdown_handler as *const () as libc::sighandler_t);
+            libc::signal(libc::SIGINT, shutdown_handler as *const () as libc::sighandler_t);
         }
 
         loop {
