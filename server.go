@@ -46,9 +46,10 @@ type Server struct {
 	shmMaxSize  int
 	shmPerm     int
 
-	mu      *sync.Mutex
-	clients map[string]*clientEntry
-	quit    chan struct{}
+	mu       *sync.Mutex
+	clients  map[string]*clientEntry
+	quit     chan struct{}
+	stopping bool
 
 	iterationCount int
 	totalDuration  time.Duration
@@ -120,9 +121,11 @@ func (s *Server) Start() error {
 		select {
 		case <-signalChan:
 			fmt.Println("\nReceived interrupt signal")
+			s.stopping = true
 			s.stop(inputShmId, inputShmBuffer, registrationListener)
 			os.Exit(0)
 		case <-s.quit:
+			s.stopping = true
 			s.stop(inputShmId, inputShmBuffer, registrationListener)
 			return
 		}
@@ -251,8 +254,8 @@ func (s *Server) Start() error {
 				}
 			}
 
-			// Treat client crashes as findings
-			if len(crashedClients) > 0 {
+			// Treat client crashes as findings (but not during shutdown)
+			if len(crashedClients) > 0 && !s.stopping {
 				fmt.Printf("Client(s) crashed: %s\n", strings.Join(crashedClients, ", "))
 				for _, name := range crashedClients {
 					results[name] = []byte("CRASHED")

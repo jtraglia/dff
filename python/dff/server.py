@@ -306,8 +306,8 @@ class Server:
                                 pass
                             del self.clients[name]
 
-                # Treat client crashes as findings
-                if dead_clients:
+                # Treat client crashes as findings (but not during shutdown)
+                if dead_clients and not self.shutdown:
                     print(f"Client(s) crashed: {', '.join(dead_clients)}")
                     for name in dead_clients:
                         results[name] = b"CRASHED"

@@ -41,6 +41,7 @@ pub struct Server {
     shm_perm: c_int,
     clients: Arc<Mutex<HashMap<String, ClientEntry>>>,
     shutdown: Arc<tokio::sync::Notify>,
+    stopping: Arc<std::sync::atomic::AtomicBool>,
     iteration_count: Arc<Mutex<u64>>,
     total_duration: Arc<Mutex<Duration>>,
 }
@@ -54,6 +55,7 @@ impl Server {
             shm_perm: DEFAULT_SHM_PERM,
             clients: Arc::new(Mutex::new(HashMap::new())),
             shutdown: Arc::new(tokio::sync::Notify::new()),
+            stopping: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             iteration_count: Arc::new(Mutex::new(0)),
             total_duration: Arc::new(Mutex::new(Duration::from_secs(0))),
         })
@@ -134,6 +136,7 @@ impl Server {
         tokio::signal::ctrl_c().await?;
         log::info!("Received interrupt signal, shutting down...");
 
+        server.stopping.store(true, std::sync::atomic::Ordering::SeqCst);
         server.shutdown.notify_waiters();
 
         // Wait for tasks to complete
@@ -462,8 +465,8 @@ impl Server {
                 }
             }
 
-            // Treat client crashes as findings
-            if !crashed_clients.is_empty() {
+            // Treat client crashes as findings (but not during shutdown)
+            if !crashed_clients.is_empty() && !self.stopping.load(std::sync::atomic::Ordering::SeqCst) {
                 println!("Client(s) crashed: {}", crashed_clients.join(", "));
                 for name in &crashed_clients {
                     client_results.insert(name.clone(), b"CRASHED".to_vec());
