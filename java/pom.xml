@@ -7,7 +7,7 @@
 
     <groupId>com.github.jtraglia</groupId>
     <artifactId>dff</artifactId>
-    <version>0.1.9</version>
+    <version>0.1.10</version>
     <packaging>jar</packaging>
 
     <name>DFF Java Client</name>
