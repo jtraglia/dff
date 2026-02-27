@@ -32,7 +32,7 @@ proc newClient*(name: string, processFunc: ProcessFunc): Client =
 
 proc connect*(client: Client) =
   ## Establishes a connection to the fuzzing server.
-  client.conn = newSocket(AF_UNIX, SOCK_STREAM, IPPROTO_IP)
+  client.conn = newSocket(Domain.AF_UNIX, SockType.SOCK_STREAM, Protocol.IPPROTO_IP)
   client.conn.connectUnix(SocketPath)
   client.conn.send(client.name)
 
@@ -92,8 +92,8 @@ proc run*(client: Client) =
   ## Runs the client fuzzing loop.
   echo "Client running... Press Ctrl+C to exit."
 
-  c_signal(SIGINT, signalHandler)
-  c_signal(SIGTERM, signalHandler)
+  signal(SIGINT, signalHandler)
+  signal(SIGTERM, signalHandler)
 
   var iterationCount = 0
   var totalProcessingMs = 0.0

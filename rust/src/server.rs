@@ -357,7 +357,8 @@ impl Server {
                     // Process all clients concurrently like Go does
                     let mut tasks = Vec::new();
 
-                    for client_name in client_names {
+                    for client_name in &client_names {
+                        let client_name = client_name.clone();
                         let inputs = inputs.clone();
                         let clients = self.clients.clone();
                         let task = tokio::spawn(async move {
@@ -555,8 +556,6 @@ impl Server {
         inputs: &[Vec<u8>],
         client_results: &std::collections::HashMap<String, Vec<u8>>,
     ) -> Result<()> {
-        use std::io::Write;
-
         let findings_dir = format!("findings/{}", iteration);
         std::fs::create_dir_all(&findings_dir).map_err(|e| {
             crate::Error::Client(format!("Failed to create findings directory: {}", e))
