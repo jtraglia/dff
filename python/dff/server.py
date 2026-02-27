@@ -53,6 +53,7 @@ class Server:
         self.input_shm: Optional[SharedMemory] = None
         self.input_shm_buffer: Optional[ctypes.Array] = None
         self.listener: Optional[socket.socket] = None
+        self.pending_crash = None
 
     def _cleanup_existing_shm(self) -> None:
         """Clean up any existing shared memory with our key."""
@@ -209,6 +210,14 @@ class Server:
         # Main fuzzing loop
         try:
             while not self.shutdown:
+                # Save any pending crash (only after 1s delay to let SIGTERM arrive)
+                if self.pending_crash is not None:
+                    iteration, crash_inputs, crash_results, crash_time = self.pending_crash
+                    if time.monotonic() - crash_time >= 1.0:
+                        self.pending_crash = None
+                        if self._save_finding(iteration, crash_inputs, crash_results):
+                            print(f"Crash finding saved to: findings/{iteration}")
+
                 # Wait until at least one client is connected
                 if len(self.clients) == 0:
                     print("Waiting for a client...")
@@ -280,8 +289,7 @@ class Server:
 
                             results[name] = result
 
-                        except Exception as e:
-                            print(f"Error communicating with client {name}: {e}")
+                        except Exception:
                             dead_clients.append(name)
 
                 # Remove gracefully disconnected clients
@@ -306,13 +314,12 @@ class Server:
                                 pass
                             del self.clients[name]
 
-                # Treat client crashes as findings (but not during shutdown)
-                if dead_clients and not self.shutdown:
+                # Defer crash detection to next iteration (avoids false positives on shutdown)
+                if dead_clients:
                     print(f"Client(s) crashed: {', '.join(dead_clients)}")
                     for name in dead_clients:
                         results[name] = b"CRASHED"
-                    if self._save_finding(self.iteration_count, inputs, results):
-                        print(f"Crash finding saved to: findings/{self.iteration_count}")
+                    self.pending_crash = (self.iteration_count, inputs, results, time.monotonic())
 
                 # Check for differences
                 elif len(results) > 1:

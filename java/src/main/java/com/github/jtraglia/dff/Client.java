@@ -7,8 +7,12 @@ import java.net.StandardProtocolFamily;
 import java.net.UnixDomainSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.file.Path;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -17,13 +21,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Client {
     private static final String SOCKET_PATH = "/tmp/dff";
     private static final int MAX_METHOD_LENGTH = 64;
-    private static final int MAX_INPUT_SIZE_BUFFER = 1024;
 
     private final String name;
     private final ProcessFunc processFunc;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
+    private final CountDownLatch shutdownComplete = new CountDownLatch(1);
 
     private SocketChannel channel;
+    private Selector selector;
     private Pointer inputShm;
     private Pointer outputShm;
     private String method;
@@ -46,7 +51,7 @@ public class Client {
      * @throws IOException if connection or setup fails
      */
     public void connect() throws IOException {
-        // Connect to Unix domain socket
+        // Connect to Unix domain socket (blocking mode for handshake)
         UnixDomainSocketAddress address = UnixDomainSocketAddress.of(Path.of(SOCKET_PATH));
         channel = SocketChannel.open(StandardProtocolFamily.UNIX);
         channel.connect(address);
@@ -57,7 +62,7 @@ public class Client {
 
         // Read input shared memory ID (4 bytes, big-endian)
         ByteBuffer inputShmIdBuffer = ByteBuffer.allocate(4);
-        readFully(inputShmIdBuffer);
+        readFullyBlocking(inputShmIdBuffer);
         inputShmIdBuffer.flip();
         inputShmIdBuffer.order(ByteOrder.BIG_ENDIAN);
         int inputShmId = inputShmIdBuffer.getInt();
@@ -67,7 +72,7 @@ public class Client {
 
         // Read output shared memory ID (4 bytes, big-endian)
         ByteBuffer outputShmIdBuffer = ByteBuffer.allocate(4);
-        readFully(outputShmIdBuffer);
+        readFullyBlocking(outputShmIdBuffer);
         outputShmIdBuffer.flip();
         outputShmIdBuffer.order(ByteOrder.BIG_ENDIAN);
         int outputShmId = outputShmIdBuffer.getInt();
@@ -92,13 +97,17 @@ public class Client {
         method = new String(methodBuffer.array(), 0, actualLength).trim();
 
         System.out.printf("Connected with fuzzing method: %s%n", method);
+
+        // Switch to non-blocking mode for the main loop (enables timeout-based reads)
+        channel.configureBlocking(false);
+        selector = Selector.open();
+        channel.register(selector, SelectionKey.OP_READ);
     }
 
     /**
-     * Runs the client fuzzing loop. Waits for the server to send input sizes,
-     * extracts the corresponding data from shared memory, processes it via the
-     * provided ProcessFunc, writes the result to output shared memory, and sends
-     * back the size of the result.
+     * Runs the client fuzzing loop. Uses non-blocking IO with 100ms timeouts
+     * so the shutdown flag can be checked periodically, enabling graceful
+     * goodbye on SIGTERM.
      *
      * @throws IOException if communication fails
      * @throws Exception if processing fails
@@ -106,10 +115,15 @@ public class Client {
     public void run() throws IOException, Exception {
         System.out.println("Client running... Press Ctrl+C to exit.");
 
-        // Setup shutdown hook for graceful cleanup
+        // Shutdown hook sets flag and waits for goodbye to be sent
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             shutdown.set(true);
-            System.out.println("\nShutdown signal received. Exiting client.");
+            System.out.println("Shutdown signal received. Exiting client.");
+            try {
+                shutdownComplete.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // ignore
+            }
         }));
 
         long iterationCount = 0;
@@ -118,30 +132,23 @@ public class Client {
         final long STATUS_INTERVAL_NANOS = 5_000_000_000L; // 5 seconds
 
         while (!shutdown.get()) {
+            // Wait for data with 100ms timeout (like Rust client's tokio::time::timeout)
+            int ready = selector.select(100);
+            if (ready == 0) continue; // timeout, loop back and check shutdown
+            selector.selectedKeys().clear();
+
             try {
-                // First read just the count (4 bytes)
+                // Read count (4 bytes)
                 ByteBuffer countBuffer = ByteBuffer.allocate(4);
                 countBuffer.order(ByteOrder.BIG_ENDIAN);
-                readFully(countBuffer);
+                if (!readFullyNonBlocking(countBuffer)) break;
                 countBuffer.flip();
                 int numInputs = countBuffer.getInt();
 
-                // Check for shutdown after reading count
-                if (shutdown.get()) {
-                    ByteBuffer goodbyeBuffer = ByteBuffer.allocate(4);
-                    goodbyeBuffer.order(ByteOrder.BIG_ENDIAN);
-                    goodbyeBuffer.putInt(0xFFFFFFFF);
-                    goodbyeBuffer.flip();
-                    channel.write(goodbyeBuffer);
-                    ByteBuffer ackBuffer = ByteBuffer.allocate(4);
-                    channel.read(ackBuffer);
-                    break;
-                }
-
-                // Now read all the sizes (numInputs * 4 bytes)
+                // Read sizes (numInputs * 4 bytes)
                 ByteBuffer sizesBuffer = ByteBuffer.allocate(numInputs * 4);
                 sizesBuffer.order(ByteOrder.BIG_ENDIAN);
-                readFully(sizesBuffer);
+                if (!readFullyNonBlocking(sizesBuffer)) break;
                 sizesBuffer.flip();
 
                 // Extract input sizes and create byte arrays from shared memory
@@ -186,16 +193,44 @@ public class Client {
                 channel.write(responseSizeBuffer);
 
             } catch (Exception e) {
-                System.err.printf("Error in client loop: %s%n", e.getMessage());
+                if (!shutdown.get()) {
+                    System.err.printf("Error in client loop: %s%n", e.getMessage());
+                }
                 break;
             }
         }
+
+        // Send goodbye to server
+        try {
+            selector.close();
+            channel.configureBlocking(true);
+            ByteBuffer goodbyeBuffer = ByteBuffer.allocate(4);
+            goodbyeBuffer.order(ByteOrder.BIG_ENDIAN);
+            goodbyeBuffer.putInt(0xFFFFFFFF);
+            goodbyeBuffer.flip();
+            channel.write(goodbyeBuffer);
+            ByteBuffer ackBuffer = ByteBuffer.allocate(4);
+            channel.read(ackBuffer);
+        } catch (Exception e) {
+            // ignore errors during goodbye
+        }
+
+        System.out.println("Client shutting down gracefully.");
+        shutdownComplete.countDown();
     }
 
     /**
      * Cleans up all resources held by the client.
      */
     public void close() {
+        try {
+            if (selector != null) {
+                selector.close();
+            }
+        } catch (IOException e) {
+            // ignore
+        }
+
         try {
             if (channel != null) {
                 channel.close();
@@ -222,15 +257,33 @@ public class Client {
     }
 
     /**
-     * Helper method to read fully into a ByteBuffer.
+     * Blocking read used during the initial handshake (connect phase).
      */
-    private void readFully(ByteBuffer buffer) throws IOException {
+    private void readFullyBlocking(ByteBuffer buffer) throws IOException {
         while (buffer.hasRemaining()) {
             int bytesRead = channel.read(buffer);
             if (bytesRead == -1) {
                 throw new IOException("Unexpected end of stream");
             }
         }
+    }
+
+    /**
+     * Non-blocking read with 100ms timeout that checks the shutdown flag.
+     * Returns false if shutdown was requested or the connection was closed.
+     */
+    private boolean readFullyNonBlocking(ByteBuffer buffer) throws IOException {
+        while (buffer.hasRemaining()) {
+            if (shutdown.get()) return false;
+            int n = channel.read(buffer);
+            if (n == -1) return false; // connection closed
+            if (n == 0) {
+                // No data available yet, wait with timeout
+                int ready = selector.select(100);
+                if (ready > 0) selector.selectedKeys().clear();
+            }
+        }
+        return true;
     }
 
     /**
