@@ -82,13 +82,12 @@ public class Client {
 
         // Read method name (up to 64 bytes)
         ByteBuffer methodBuffer = ByteBuffer.allocate(MAX_METHOD_LENGTH);
-        int methodLength = channel.read(methodBuffer);
-        if (methodLength <= 0) {
-            throw new IOException("Failed to read method name");
-        }
+        // Read method name (exactly 64 bytes, null-padded by server)
+        readFullyBlocking(methodBuffer);
+        methodBuffer.flip();
         // Find null terminator or use full length
-        int actualLength = methodLength;
-        for (int i = 0; i < methodLength; i++) {
+        int actualLength = MAX_METHOD_LENGTH;
+        for (int i = 0; i < MAX_METHOD_LENGTH; i++) {
             if (methodBuffer.get(i) == 0) {
                 actualLength = i;
                 break;

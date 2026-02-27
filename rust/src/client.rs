@@ -96,12 +96,13 @@ impl Client {
         }
         self.output_shm = Some(output_shm_ptr as *mut u8);
 
-        // Read method name (up to 64 bytes)
+        // Read method name (exactly 64 bytes, null-padded by server)
         let mut method_bytes = [0u8; 64];
-        let method_length = stream.read(&mut method_bytes).await?;
-        self.method = String::from_utf8_lossy(&method_bytes[..method_length]).to_string();
+        stream.read_exact(&mut method_bytes).await?;
+        let method_end = method_bytes.iter().position(|&b| b == 0).unwrap_or(64);
+        self.method = String::from_utf8_lossy(&method_bytes[..method_end]).to_string();
 
-        log::info!("Connected with fuzzing method: {}", self.method);
+        println!("Connected with fuzzing method: {}", self.method);
 
         self.conn = Some(stream);
         Ok(())

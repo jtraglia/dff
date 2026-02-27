@@ -122,8 +122,12 @@ class Server:
             # Send output shared memory ID
             conn.sendall(struct.pack(">I", output_shm.shmid))
 
-            # Send method name
-            conn.sendall(self.method.encode())
+            # Send method name (fixed 64 bytes, null-padded)
+            method_padded = self.method.encode().ljust(64, b'\x00')
+            conn.sendall(method_padded)
+
+            # Set timeout for main loop communication
+            conn.settimeout(60.0)
 
             # Store client
             with self.clients_lock:
