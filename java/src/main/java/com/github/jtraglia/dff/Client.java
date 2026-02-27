@@ -126,6 +126,18 @@ public class Client {
                 countBuffer.flip();
                 int numInputs = countBuffer.getInt();
 
+                // Check for shutdown after reading count
+                if (shutdown.get()) {
+                    ByteBuffer goodbyeBuffer = ByteBuffer.allocate(4);
+                    goodbyeBuffer.order(ByteOrder.BIG_ENDIAN);
+                    goodbyeBuffer.putInt(0xFFFFFFFF);
+                    goodbyeBuffer.flip();
+                    channel.write(goodbyeBuffer);
+                    ByteBuffer ackBuffer = ByteBuffer.allocate(4);
+                    channel.read(ackBuffer);
+                    break;
+                }
+
                 // Now read all the sizes (numInputs * 4 bytes)
                 ByteBuffer sizesBuffer = ByteBuffer.allocate(numInputs * 4);
                 sizesBuffer.order(ByteOrder.BIG_ENDIAN);

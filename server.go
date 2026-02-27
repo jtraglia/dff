@@ -167,6 +167,12 @@ func (s *Server) Start() error {
 			}
 			s.mu.Unlock()
 
+			// Capture client names before communication
+			clientNames := make([]string, 0, len(clients))
+			for _, client := range clients {
+				clientNames = append(clientNames, client.Name)
+			}
+
 			var wg sync.WaitGroup
 			var muResult sync.Mutex
 			results := make(map[string][]byte)
@@ -212,6 +218,22 @@ func (s *Server) Start() error {
 					}
 					responseSize := binary.BigEndian.Uint32(responseSizeBytes)
 
+					// Check for goodbye sentinel
+					if responseSize == 0xFFFFFFFF {
+						var ack [4]byte
+						binary.BigEndian.PutUint32(ack[:], 0xFFFFFFFF)
+						client.Conn.Write(ack[:])
+						fmt.Printf("Client %s disconnected gracefully\n", client.Name)
+						detachAndDelete(client.ShmId, client.ShmBuffer)
+						s.mu.Lock()
+						delete(s.clients, client.Name)
+						s.mu.Unlock()
+						muResult.Lock()
+						results[client.Name] = []byte("GOODBYE")
+						muResult.Unlock()
+						return
+					}
+
 					muResult.Lock()
 					results[client.Name] = client.ShmBuffer[:responseSize]
 					muResult.Unlock()
@@ -219,32 +241,58 @@ func (s *Server) Start() error {
 			}
 			wg.Wait()
 
-			// Compare client responses.
-			same := true
-			var first []byte
-			firstResultSet := false
-			for _, result := range results {
-				if !firstResultSet {
-					first = result
-					firstResultSet = true
-				} else if !bytes.Equal(result, first) {
-					same = false
-					break
+			// Detect crashed clients (exclude graceful disconnects)
+			var crashedClients []string
+			for _, name := range clientNames {
+				if result, ok := results[name]; !ok {
+					crashedClients = append(crashedClients, name)
+				} else if string(result) == "GOODBYE" {
+					delete(results, name)
 				}
 			}
-			if !same {
-				fmt.Println("Values are different:")
-				for client, result := range results {
-					fmt.Printf("Key: %v, Value: %x\n", client, result)
+
+			// Treat client crashes as findings
+			if len(crashedClients) > 0 {
+				fmt.Printf("Client(s) crashed: %s\n", strings.Join(crashedClients, ", "))
+				for _, name := range crashedClients {
+					results[name] = []byte("CRASHED")
 				}
 
-				// Save finding to disk
 				s.mu.Lock()
 				iterationNum := s.iterationCount
 				s.mu.Unlock()
 
 				if err := s.saveFinding(iterationNum, inputs, results); err != nil {
-					fmt.Printf("Failed to save finding: %v\n", err)
+					fmt.Printf("Failed to save crash finding: %v\n", err)
+				}
+			} else if len(results) > 1 {
+				// Compare client responses.
+				same := true
+				var first []byte
+				firstResultSet := false
+				for _, result := range results {
+					if !firstResultSet {
+						first = result
+						firstResultSet = true
+					} else if !bytes.Equal(result, first) {
+						same = false
+						break
+					}
+				}
+				if !same {
+					fmt.Println("Values are different:")
+					for client, result := range results {
+						fmt.Printf("Key: %v, Value: %x\n", client, result)
+					}
+
+					// Save finding to disk
+					s.mu.Lock()
+					iterationNum := s.iterationCount
+					s.mu.Unlock()
+
+					if err := s.saveFinding(iterationNum, inputs, results); err != nil {
+						fmt.Printf("Failed to save finding: %v\n", err)
+					}
 				}
 			}
 
@@ -398,17 +446,11 @@ func (s *Server) saveFinding(iteration int, inputs [][]byte, results map[string]
 		return fmt.Errorf("failed to create findings directory: %v", err)
 	}
 
-	// Save input data (concatenated)
-	inputPath := fmt.Sprintf("%s/input", findingsDir)
-	inputFile, err := os.Create(inputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create input file: %v", err)
-	}
-	defer inputFile.Close()
-
-	for _, input := range inputs {
-		if _, err := inputFile.Write(input); err != nil {
-			return fmt.Errorf("failed to write input data: %v", err)
+	// Save each input separately
+	for i, input := range inputs {
+		inputPath := fmt.Sprintf("%s/input_%d", findingsDir, i)
+		if err := os.WriteFile(inputPath, input, 0644); err != nil {
+			return fmt.Errorf("failed to write input_%d: %v", i, err)
 		}
 	}
 

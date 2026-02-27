@@ -120,6 +120,11 @@ impl Client {
                 // Handle Ctrl+C signal
                 _ = tokio::signal::ctrl_c() => {
                     log::info!("Received interrupt signal, shutting down...");
+                    // Send goodbye sentinel and wait for ack
+                    let goodbye = 0xFFFFFFFFu32.to_be_bytes();
+                    let _ = stream.write_all(&goodbye).await;
+                    let mut ack = [0u8; 4];
+                    let _ = stream.read_exact(&mut ack).await;
                     break;
                 }
 

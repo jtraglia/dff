@@ -399,7 +399,17 @@ impl Server {
                                     return None;
                                 }
 
-                                let output_size = u32::from_be_bytes(response) as usize;
+                                let output_size = u32::from_be_bytes(response);
+
+                                // Check for goodbye sentinel
+                                if output_size == 0xFFFFFFFF {
+                                    let _ = client.conn.write_all(&0xFFFFFFFFu32.to_be_bytes()).await;
+                                    println!("Client {} disconnected gracefully", client_name);
+                                    clients.remove(&client_name);
+                                    return Some((client_name.clone(), b"GOODBYE".to_vec()));
+                                }
+
+                                let output_size = output_size as usize;
                                 if output_size > 0 && output_size <= client.shm_buffer.len() {
                                     // The client.shm_buffer is just a copy from registration time
                                     // We need to read from the actual shared memory segment
@@ -432,14 +442,42 @@ impl Server {
 
             // Collect successful results for comparison
             let mut client_results = std::collections::HashMap::new();
+            let mut crashed_clients = Vec::new();
+            let mut graceful_disconnects = Vec::new();
             for result in results {
                 if let Ok(Some((client_name, output))) = result {
-                    client_results.insert(client_name, output);
+                    if output == b"GOODBYE" {
+                        graceful_disconnects.push(client_name);
+                    } else {
+                        client_results.insert(client_name, output);
+                    }
                 }
             }
 
-            // Compare client responses like Go server does
-            if client_results.len() > 1 {
+            // Detect crashed clients by comparing against original client list
+            for name in &client_names {
+                if !client_results.contains_key(name) && !graceful_disconnects.contains(name) {
+                    crashed_clients.push(name.clone());
+                }
+            }
+
+            // Treat client crashes as findings
+            if !crashed_clients.is_empty() {
+                println!("Client(s) crashed: {}", crashed_clients.join(", "));
+                for name in &crashed_clients {
+                    client_results.insert(name.clone(), b"CRASHED".to_vec());
+                }
+
+                let iteration_num = {
+                    let count = self.iteration_count.lock().await;
+                    *count
+                };
+
+                if let Err(e) = self.save_finding(iteration_num, &inputs, &client_results).await {
+                    log::error!("Failed to save crash finding: {}", e);
+                }
+            // Check for differences
+            } else if client_results.len() > 1 {
                 let mut first_result: Option<&Vec<u8>> = None;
                 let mut same = true;
 
@@ -524,15 +562,11 @@ impl Server {
             crate::Error::Client(format!("Failed to create findings directory: {}", e))
         })?;
 
-        // Save input data (concatenated)
-        let input_path = format!("{}/input", findings_dir);
-        let mut input_file = std::fs::File::create(&input_path).map_err(|e| {
-            crate::Error::Client(format!("Failed to create input file: {}", e))
-        })?;
-
-        for input in inputs {
-            input_file.write_all(input).map_err(|e| {
-                crate::Error::Client(format!("Failed to write input data: {}", e))
+        // Save each input separately
+        for (i, input) in inputs.iter().enumerate() {
+            let input_path = format!("{}/input_{}", findings_dir, i);
+            std::fs::write(&input_path, input).map_err(|e| {
+                crate::Error::Client(format!("Failed to write input_{}: {}", i, e))
             })?;
         }
 

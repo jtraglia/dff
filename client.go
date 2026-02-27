@@ -166,6 +166,12 @@ func (c *Client) Run() error {
 		select {
 		case <-signalChan:
 			fmt.Println("\nCtrl+C detected. Exiting client.")
+			// Send goodbye sentinel and wait for ack
+			var goodbye [4]byte
+			binary.BigEndian.PutUint32(goodbye[:], 0xFFFFFFFF)
+			c.conn.Write(goodbye[:])
+			var ack [4]byte
+			c.conn.Read(ack[:])
 			return nil
 		default:
 			// Continue looping.

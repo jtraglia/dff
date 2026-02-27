@@ -117,6 +117,8 @@ class Client:
         last_status = time.monotonic()
         STATUS_INTERVAL = 5.0
 
+        GOODBYE = struct.pack(">I", 0xFFFFFFFF)
+
         try:
             while not self.shutdown:
                 # Read the message containing number of inputs and their sizes
@@ -126,6 +128,12 @@ class Client:
 
                 if len(input_msg) < 4:
                     raise ValueError(f"Invalid input message length: {len(input_msg)}")
+
+                # Check for shutdown after reading input
+                if self.shutdown:
+                    self.conn.sendall(GOODBYE)
+                    self.conn.recv(4)  # Wait for server ack
+                    break
 
                 # First 4 bytes: number of inputs
                 num_inputs = struct.unpack(">I", input_msg[0:4])[0]

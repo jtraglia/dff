@@ -250,6 +250,7 @@ class Server:
                 # Send to all clients and collect results
                 results = {}
                 dead_clients = []
+                graceful_disconnects = []
 
                 with self.clients_lock:
                     for name, client in self.clients.items():
@@ -265,6 +266,12 @@ class Server:
 
                             result_size = struct.unpack(">I", result_size_bytes)[0]
 
+                            # Check for goodbye sentinel
+                            if result_size == 0xFFFFFFFF:
+                                client.conn.sendall(struct.pack(">I", 0xFFFFFFFF))
+                                graceful_disconnects.append(name)
+                                continue
+
                             # Read result from client's output shared memory
                             output_shm = SharedMemory(client.shm_id)
                             output_buffer = output_shm.attach()
@@ -277,6 +284,17 @@ class Server:
                             print(f"Error communicating with client {name}: {e}")
                             dead_clients.append(name)
 
+                # Remove gracefully disconnected clients
+                for name in graceful_disconnects:
+                    print(f"Client disconnected gracefully: {name}")
+                    with self.clients_lock:
+                        if name in self.clients:
+                            try:
+                                self.clients[name].conn.close()
+                            except:
+                                pass
+                            del self.clients[name]
+
                 # Remove dead clients
                 for name in dead_clients:
                     print(f"Disconnected client: {name}")
@@ -288,8 +306,16 @@ class Server:
                                 pass
                             del self.clients[name]
 
+                # Treat client crashes as findings
+                if dead_clients:
+                    print(f"Client(s) crashed: {', '.join(dead_clients)}")
+                    for name in dead_clients:
+                        results[name] = b"CRASHED"
+                    if self._save_finding(self.iteration_count, inputs, results):
+                        print(f"Crash finding saved to: findings/{self.iteration_count}")
+
                 # Check for differences
-                if len(results) > 1:
+                elif len(results) > 1:
                     first_result = None
                     all_same = True
                     for result in results.values():
@@ -365,10 +391,10 @@ class Server:
         try:
             os.makedirs(findings_dir, exist_ok=True)
 
-            # Save input data (concatenated)
-            input_path = f"{findings_dir}/input"
-            with open(input_path, "wb") as f:
-                for input_data in inputs:
+            # Save each input separately
+            for i, input_data in enumerate(inputs):
+                input_path = f"{findings_dir}/input_{i}"
+                with open(input_path, "wb") as f:
                     f.write(input_data)
 
             # Save method name

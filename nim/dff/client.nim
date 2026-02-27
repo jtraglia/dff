@@ -3,7 +3,7 @@
 ## This module provides a client implementation for connecting to a fuzzing server
 ## and processing fuzzing inputs through a user-provided callback function.
 
-import std/[net, strutils, endians, times]
+import std/[net, strutils, endians, times, posix]
 
 proc shmat(shmid: cint, shmaddr: pointer, shmflg: cint): pointer {.importc, header: "<sys/shm.h>".}
 proc shmdt(shmaddr: pointer): cint {.importc, header: "<sys/shm.h>".}
@@ -82,15 +82,24 @@ proc connect*(client: Client) =
 
   echo "Connected with fuzzing method: ", client.fuzzMethod
 
+var shutdownRequested = false
+
+proc signalHandler(sig: cint) {.noconv.} =
+  shutdownRequested = true
+  echo "\nShutdown signal received."
+
 proc run*(client: Client) =
   ## Runs the client fuzzing loop.
   echo "Client running... Press Ctrl+C to exit."
+
+  c_signal(SIGINT, signalHandler)
+  c_signal(SIGTERM, signalHandler)
 
   var iterationCount = 0
   var totalProcessingMs = 0.0
   var lastStatus = cpuTime()
   const statusInterval = 5.0
-  while true:
+  while not shutdownRequested:
     try:
       var inputSizeData = ""
       let countData = client.conn.recv(4)
@@ -98,6 +107,17 @@ proc run*(client: Client) =
         echo "Failed to read count"
         break
       inputSizeData = countData
+
+      # Check for shutdown after reading input
+      if shutdownRequested:
+        var goodbyeBE: uint32
+        var goodbyeLE: uint32 = 0xFFFFFFFF'u32
+        swapEndian32(addr goodbyeBE, addr goodbyeLE)
+        var goodbyeBuffer = newString(4)
+        copyMem(addr goodbyeBuffer[0], addr goodbyeBE, 4)
+        client.conn.send(goodbyeBuffer)
+        discard client.conn.recv(4)  # Wait for server ack
+        break
 
       var numInputsBE: uint32
       copyMem(addr numInputsBE, unsafeAddr countData[0], 4)
