@@ -1,6 +1,6 @@
+jdk:
+  - openjdk17
 before_install:
-  - sdk install java 21-open
-  - sdk use java 21-open
   - cd java
 install:
   - mvn install -DskipTests
